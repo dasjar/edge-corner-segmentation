@@ -1,0 +1,24 @@
+# Ignore cache, models, and large data
+__pycache__/
+*.pyc
+*.pyo
+*.pkl
+*.pt
+*.pth
+*.npy
+*.npz
+*.nii
+*.zip
+*.tar
+*.gz
+
+# Ignore IDE/project files
+.vscode/
+.idea/
+
+# Ignore local runtime data
+data/raw/
+data/outputs/
+experiments/
+logs/
+.DS_Store
