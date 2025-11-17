@@ -3,11 +3,14 @@
 # boundary_extract.py
 # Exact object boundary extraction using classical CV methods.
 # -------------------------------------------------------------
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import os
 import argparse
 import numpy as np
-import cv2 as cv
-from common import list_images, read_image, to_gray, ensure_dir, write_image
+import cv2  # use cv2 consistently
+from src.common import list_images, read_image, to_gray, ensure_dir, write_image
+
 
 def extract_boundary(
     img,
@@ -18,29 +21,28 @@ def extract_boundary(
 ):
     """
     Classical boundary extraction with preprocessing and
-    geometric contour filtering (for rectangular objects).
+    geometric contour filtering (for rectangular or near-rectangular objects).
     """
-
     # --- 1. Grayscale & contrast normalization ---
     gray = to_gray(img)
-    gray_eq = cv.equalizeHist(gray)
+    gray_eq = cv2.equalizeHist(gray)
 
     # --- 2. Edge sharpening ---
-    lap = cv.Laplacian(gray_eq, cv.CV_8U)
-    sharp = cv.addWeighted(gray_eq, 1.5, lap, -0.5, 0)
+    lap = cv2.Laplacian(gray_eq, cv2.CV_8U)
+    sharp = cv2.addWeighted(gray_eq, 1.5, lap, -0.5, 0)
 
     # --- 3. Smooth to reduce noise ---
-    blur = cv.GaussianBlur(sharp, (blur_size, blur_size), 0)
+    blur = cv2.GaussianBlur(sharp, (blur_size, blur_size), 0)
 
     # --- 4. Canny edge detection ---
-    edges = cv.Canny(blur, canny1, canny2)
+    edges = cv2.Canny(blur, canny1, canny2)
 
     # --- 5. Morphological closing to connect fragmented edges ---
-    kernel = cv.getStructuringElement(cv.MORPH_RECT, (5, 5))
-    edges_closed = cv.morphologyEx(edges, cv.MORPH_CLOSE, kernel)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    edges_closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
 
     # --- 6. Find contours ---
-    contours, _ = cv.findContours(edges_closed, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(edges_closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
         return None, edges_closed, None
 
@@ -50,11 +52,11 @@ def extract_boundary(
     best_score = 0
 
     for c in contours:
-        area = cv.contourArea(c)
+        area = cv2.contourArea(c)
         if area < min_area:
             continue
 
-        x, y, cw, ch = cv.boundingRect(c)
+        x, y, cw, ch = cv2.boundingRect(c)
         aspect = cw / float(ch)
         rect_area = cw * ch
         fill_ratio = area / float(rect_area + 1e-6)
@@ -67,15 +69,15 @@ def extract_boundary(
 
     # fallback: largest contour if scoring fails
     if best_contour is None:
-        best_contour = max(contours, key=cv.contourArea)
+        best_contour = max(contours, key=cv2.contourArea)
 
     # --- 8. Draw overlay ---
     overlay = img.copy()
-    cv.drawContours(overlay, [best_contour], -1, (0, 0, 255), 3)
+    cv2.drawContours(overlay, [best_contour], -1, (0, 0, 255), 3)
 
     # --- 9. Create binary mask ---
     mask = np.zeros_like(gray, dtype=np.uint8)
-    cv.drawContours(mask, [best_contour], -1, 255, -1)  # filled mask
+    cv2.drawContours(mask, [best_contour], -1, 255, -1)  # filled mask
 
     return overlay, edges_closed, mask
 
@@ -98,18 +100,22 @@ def run(in_dir, out_dir):
             print(f"[WARN] {name}: no valid contour found")
 
 
+# -------------------------------------------------------------
+# Simple version for Streamlit app real-time use
+# -------------------------------------------------------------
+def extract_boundary_simple(img):
+    """Simplified boundary extraction for live visualization (Streamlit)."""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 100, 200)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    result = img.copy()
+    cv2.drawContours(result, contours, -1, (0, 255, 0), 2)
+    return result
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--in_dir", default="data/raw", help="input image directory")
     ap.add_argument("--out_dir", default="data/outputs/boundary_extract", help="output directory")
     args = ap.parse_args()
-
     run(**vars(args))
-
-def extract_boundary(img):
-    gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-    edges = cv.Canny(gray, 100, 200)
-    contours, _ = cv.findContours(edges, cv.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    result = img.copy()
-    cv.drawContours(result, contours, -1, (0, 255, 0), 2)
-    return result

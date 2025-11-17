@@ -21,8 +21,7 @@ def load_image(path):
 
 
 # ==========================================================
-# Directories for outputs of each question
-# (MATCHES YOUR IMPLEMENTATION EXACTLY)
+# Directories (MATCH YOUR IMPLEMENTATION)
 # ==========================================================
 DIR_RAW = Path("data/raw")
 DIR_RAW_ARUCO = Path("data/raw_aruco")
@@ -30,45 +29,32 @@ DIR_RAW_ARUCO = Path("data/raw_aruco")
 DIR_Q1 = Path("data/outputs/gradlog")
 DIR_Q2_EDGES = Path("data/outputs/edge_keypoints")
 DIR_Q2_CORNERS = Path("data/outputs/corner_keypoints")
-
 DIR_Q3 = Path("data/outputs/boundary_extract")
 DIR_Q4 = Path("data/outputs/aruco_segment")
 
-DIR_Q5 = Path("data/outputs/sam2_overlays")   # SAM2 OUTPUT
+# CORRECT SAM2 PATH + FILENAME FORMAT
+DIR_Q5 = Path("data/outputs/sam2_overlays")
 
 
 # ==========================================================
-# STREAMLIT LAYOUT
+# STREAMLIT UI
 # ==========================================================
-st.set_page_config(page_title="Edge-Corner-Detection & Image Segmentaion", layout="wide")
-st.title("Edge-Corner-Detection & Image Segmentaion")
-st.markdown(
-    """
-This interactive app showcases all five major components of this project:
-
-1. **Gradient Magnitude / Orientation & Laplacian of Gaussian**  
-2. **Edge Keypoints + Shi–Tomasi Corners**  
-3. **Exact Object Boundary Extraction**  
-4. **ArUco Marker Segmentation for Non-Rectangular Objects**  
-5. **SAM2 Deep Segmentation Comparison (Q5)**  
-
-Use the tabs below to navigate.
-    """
-)
+st.set_page_config(page_title="CSc 8830 – Assignment 3", layout="wide")
+st.title("CSc 8830 – Computer Vision Assignment 3")
 
 tabs = st.tabs([
     "Q1 – Gradient & LoG",
     "Q2 – Edge and Corner Keypoints",
     "Q3 – Boundary Extraction",
-    "Q4 – ArUco Marker Segmentation"])
+    "Q4 – ArUco + SAM2 Segmentation"
+])
 
 # ==========================================================
-# Q1 – Gradient & LoG
+# Q1 – Gradient & LoG  (UNCHANGED)
 # ==========================================================
 with tabs[0]:
     st.header("Q1 – Gradient Magnitude, Orientation & Laplacian of Gaussian")
 
-    # Load list of gradient magnitude files
     files = sorted(DIR_Q1.glob("*_grad_mag.png"))
     if not files:
         st.warning(f"No Q1 output files found in {DIR_Q1}.")
@@ -76,38 +62,24 @@ with tabs[0]:
         file = st.selectbox("Select image", files, key="q1")
         stem = file.name.replace("_grad_mag.png", "")
 
-        # Load all Q1 images
         grad_mag = load_image(file)
         grad_ang = load_image(DIR_Q1 / f"{stem}_grad_ang.png")
         log_img = load_image(DIR_Q1 / f"{stem}_log.png")
 
-        # Load original from data/raw
-        original = load_image(DIR_RAW / f"{stem}.jpg")
+        original = load_image(DIR_RAW / f"{stem}.jpg") or load_image(DIR_RAW / f"{stem}.png")
         if original is None:
-            original = load_image(DIR_RAW / f"{stem}.png")
-        if original is None:
-            st.error(f"Original image not found in {DIR_RAW} for stem '{stem}'")
+            st.error(f"Original image for {stem} not found.")
             st.stop()
 
-        # Layout: 4 columns
         col1, col2, col3, col4 = st.columns(4)
-
-        with col1:
-            st.image(original, caption="Original Image", use_container_width=True)
-
-        with col2:
-            st.image(grad_mag, caption="Gradient Magnitude", use_container_width=True)
-
-        with col3:
-            st.image(grad_ang, caption="Gradient Angle (HSV)", use_container_width=True)
-
-        with col4:
-            st.image(log_img, caption="Laplacian of Gaussian", use_container_width=True)
-
+        with col1: st.image(original, caption="Original Image", use_container_width=True)
+        with col2: st.image(grad_mag, caption="Gradient Magnitude", use_container_width=True)
+        with col3: st.image(grad_ang, caption="Gradient Angle (HSV)", use_container_width=True)
+        with col4: st.image(log_img, caption="Laplacian of Gaussian", use_container_width=True)
 
 
 # ==========================================================
-# Q2 – Edge Keypoints + Shi–Tomasi Corners
+# Q2 – Edge Keypoints + Corners  (UNCHANGED)
 # ==========================================================
 with tabs[1]:
     st.header("Q2 – Edge and Corner Keypoints")
@@ -119,10 +91,7 @@ with tabs[1]:
         file = st.selectbox("Select image", edge_outputs, key="q2")
         stem = file.name.replace("_grad_edges_overlay.png", "")
 
-        # Try raw image
-        raw = load_image(DIR_RAW / f"{stem}.jpg")
-        if raw is None:
-            raw = load_image(DIR_RAW / f"{stem}.png")
+        raw = load_image(DIR_RAW / f"{stem}.jpg") or load_image(DIR_RAW / f"{stem}.png")
 
         edges = load_image(file)
         corners = load_image(DIR_Q2_CORNERS / f"{stem}_corners.png")
@@ -134,40 +103,25 @@ with tabs[1]:
 
 
 # ==========================================================
-# Q3 – Boundary Extraction
+# Q3 – Boundary Extraction (UNCHANGED)
 # ==========================================================
 with tabs[2]:
     st.header("Q3 – Boundary Extraction (Classical CV)")
 
-    # Load boundary outputs
     boundary_files = sorted(DIR_Q3.glob("*_boundary.png"))
     if not boundary_files:
         st.warning(f"No boundary extraction outputs found in {DIR_Q3}.")
     else:
-        selected = st.selectbox("Select boundary result", boundary_files, key="q3")
-
-        # Stem "1_boundary.png" -> "1"
+        selected = st.selectbox("Select result", boundary_files, key="q3")
         stem = selected.name.replace("_boundary.png", "")
 
-        # Load original image
-        orig = load_image(DIR_RAW / f"{stem}.jpg")
-        if orig is None:
-            orig = load_image(DIR_RAW / f"{stem}.png")
-
-        if orig is None:
-            st.error(f"Original image for '{stem}' not found in {DIR_RAW}")
-            st.stop()
-
+        orig = load_image(DIR_RAW / f"{stem}.jpg") or load_image(DIR_RAW / f"{stem}.png")
         boundary = load_image(selected)
 
-        # Layout: 2 columns: original + boundary
         col1, col2 = st.columns(2)
+        with col1: st.image(orig, caption="Original Image", use_container_width=True)
+        with col2: st.image(boundary, caption="Extracted Boundary", use_container_width=True)
 
-        with col1:
-            st.image(orig, caption="Original Image", use_container_width=True)
-
-        with col2:
-            st.image(boundary, caption="Extracted Boundary", use_container_width=True)
 
 # ==========================================================
 # Q4 – COMBINED ArUco Marker Segmentation + SAM2 Deep Segmentation
@@ -182,24 +136,23 @@ with tabs[3]:
         selected = st.selectbox("Select image", q4_files, key="q4")
         stem = selected.name.replace("_aruco_boundary.png", "")
 
-        # Load original correctly (fix boolean issue)
-        orig = load_image(DIR_RAW_ARUCO / f"{stem}.jpg")
-        if orig is None:
-            orig = load_image(DIR_RAW_ARUCO / f"{stem}.png")
+        # Load original
+        orig = load_image(DIR_RAW_ARUCO / f"{stem}.jpg") or load_image(DIR_RAW_ARUCO / f"{stem}.png")
 
         # Load ArUco results
         aruco_boundary = load_image(DIR_Q4 / f"{stem}_aruco_boundary.png")
         aruco_mask     = load_image(DIR_Q4 / f"{stem}_aruco_mask.png")
 
-        # SAM2 correct filename format
+        # ------------------------------------------------------------
+        # FIXED SAM2 filename format:
+        #     "1.jpg_sam2_overlay.png"
+        # ------------------------------------------------------------
         sam2_filename = f"{stem}.jpg_sam2_overlay.png"
         sam2_path = DIR_Q5 / sam2_filename
 
-        sam2_overlay = None
-        if sam2_path.exists():
-            sam2_overlay = load_image(sam2_path)
+        sam2_overlay = load_image(sam2_path) if sam2_path.exists() else None
 
-        # Layout
+        # Layout: 2 × 2 grid
         col1, col2 = st.columns(2)
         col3, col4 = st.columns(2)
 
@@ -210,7 +163,7 @@ with tabs[3]:
             st.image(aruco_boundary, caption="ArUco Boundary Overlay", use_container_width=True)
 
         with col3:
-            st.image(aruco_mask, caption="Mask from Marker Hull for Aruco", use_container_width=True)
+            st.image(aruco_mask, caption="Mask from Marker Hull", use_container_width=True)
 
         with col4:
             if sam2_overlay is None:

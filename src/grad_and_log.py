@@ -1,8 +1,10 @@
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import os
 import argparse
 import numpy as np
 import cv2 as cv
-from common import (
+from src.common import (
     list_images, read_image, write_image, to_gray,
     gradient_mag_angle, laplacian_of_gaussian, normalize_8u, angle_to_hsv_bgr,
     ensure_dir

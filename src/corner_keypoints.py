@@ -1,85 +1,104 @@
-import os
-import argparse
+#!/usr/bin/env python3
+# -------------------------------------------------------------
+# corner_keypoints.py
+# Shi–Tomasi Corner Detection (clean, stable)
+# -------------------------------------------------------------
+
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+import cv2
 import numpy as np
-import cv2  # ensure cv2 is imported properly
 from src.common import list_images, read_image, to_gray, ensure_dir, write_image
 
-def harris_corners(gray: np.ndarray,
-                   block_size: int = 2,
-                   ksize: int = 3,
-                   k: float = 0.04,
-                   thresh_ratio: float = 0.08):
+
+# =============================================================
+# SHI–TOMASI CORNER DETECTOR (Minimum Eigenvalue)
+# =============================================================
+def shi_tomasi_corners(gray, 
+                       max_corners=200,
+                       quality=0.015,      # lower → more corners
+                       min_distance=25):   # increase → fewer corners
     """
-    Tuned Harris Corner Detector for smooth, low-texture objects.
-
-    Changes:
-      - Milder blur to preserve edge contrast
-      - Lower threshold (8%) to recover weak corners
-      - Smaller block size for sharper corner localization
+    Clean Shi–Tomasi corner detector.
+    Produces stable & non-noisy corners suitable for smooth/rounded objects.
     """
-    # --- Preprocessing ---
-    gray_blur = cv2.GaussianBlur(gray, (3, 3), 0.7)  # smaller blur keeps contrast
-    gray_eq = cv2.equalizeHist(gray_blur)
 
-    # --- Harris Response ---
-    gray_f = np.float32(gray_eq)
-    R = cv2.cornerHarris(gray_f, block_size, ksize, k)
-    R = cv2.dilate(R, None)
+    # 1. LIGHT BLUR (Shi–Tomasi doesn't need heavy blur)
+    gray_blur = cv2.GaussianBlur(gray, (5, 5), 1)
 
-    # --- Normalize for visualization ---
-    R_norm = cv2.normalize(R, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+    # 2. Shi–Tomasi detector
+    corners = cv2.goodFeaturesToTrack(
+        gray_blur,
+        maxCorners=max_corners,
+        qualityLevel=quality,
+        minDistance=min_distance,
+        blockSize=7,
+        useHarrisDetector=False
+    )
 
-    # --- Threshold ---
-    T = thresh_ratio * R.max()
-    nms = cv2.dilate(R, None)
-    mask_nms = (R == nms) & (R > T)
-    ys, xs = np.where(mask_nms)
-    coords = np.stack([xs, ys], axis=1)
+    if corners is None:
+        return np.zeros((0, 2)), np.zeros((0, 2))
 
-    return coords, R_norm
+    # Convert to float
+    corners = np.squeeze(corners).astype(np.float32)
+
+    # 3. Subpixel refinement (optional but increases accuracy)
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 60, 0.01)
+    refined = cv2.cornerSubPix(gray_blur, corners, (7,7), (-1,-1), criteria)
+
+    return corners, refined
 
 
+# =============================================================
+# BATCH MODE (command-line execution)
+# =============================================================
 def run(in_dir: str, out_dir: str):
     ensure_dir(out_dir)
+
     for p in list_images(in_dir):
         name = os.path.basename(p)
         stem = os.path.splitext(name)[0]
+
         img = read_image(p)
         gray = to_gray(img)
 
-        # Harris corner detection
-        corners, R_vis = harris_corners(
-            gray,
-            block_size=3,   # larger neighborhood
-            ksize=3,
-            k=0.03,
-            thresh_ratio=0.1   # increased to detect more corners
-        )
+        coarse, refined = shi_tomasi_corners(gray)
 
-        # Overlay corners on image
+        # Draw results
         overlay = img.copy()
-        for (x, y) in corners:
-            cv2.circle(overlay, (int(x), int(y)), 3, (0, 0, 255), 1, lineType=cv2.LINE_AA)
 
-        # Save results
-        write_image(os.path.join(out_dir, f"{stem}_harris_response.png"), R_vis)
-        write_image(os.path.join(out_dir, f"{stem}_harris_corners.png"), overlay)
-        print(f"[OK] {name}: {len(corners)} Harris corners detected")
+        # BIG GREEN DOTS
+        for (x, y) in refined:
+            cv2.circle(overlay, (int(x), int(y)), 10, (0,255,0), -1)   
+
+        write_image(os.path.join(out_dir, f"{stem}_corners.png"), overlay)
+        print(f"[OK] {name}: {len(refined)} Shi–Tomasi corners detected")
 
 
 if __name__ == "__main__":
+    import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument("--in_dir", default="data/raw")
-    ap.add_argument("--out_dir", default="data/outputs/corner_keypoints")
+    ap.add_argument("--in_dir", default="data/raw", help="input image folder")
+    ap.add_argument("--out_dir", default="data/outputs/corner_keypoints", help="output folder")
     args = ap.parse_args()
     run(**vars(args))
 
 
+# =============================================================
+# STREAMLIT WRAPPER (for the Web App)
+# =============================================================
 def detect_corners(img):
-    """Simplified corner detection for Streamlit visualization."""
-    gray = np.float32(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
-    dst = cv2.cornerHarris(gray, 2, 3, 0.04)
-    dst = cv2.dilate(dst, None)
-    img2 = img.copy()
-    img2[dst > 0.01 * dst.max()] = [0, 0, 255]
-    return img2
+    """
+    Called from Streamlit. Returns an image with bold green corners.
+    """
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    coarse, refined = shi_tomasi_corners(gray)
+
+    result = img.copy()
+
+    for (x, y) in refined:
+        cv2.circle(result, (int(x), int(y)), 10, (0,255,0), -1)
+
+    return result
